@@ -1,0 +1,43 @@
+{
+  "name": "twitch-simple-irc",
+  "version": "0.0.1",
+  "license": "MIT",
+  "author": "DmitryScaletta",
+  "description": "Simple Twitch Chat Client",
+  "main": "dist/index.js",
+  "module": "dist/twitch-simple-irc1.esm.js",
+  "typings": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "start": "tsdx watch",
+    "build": "tsdx build",
+    "test": "tsdx test",
+    "lint": "tsdx lint",
+    "preghpublish": "npm run build",
+    "ghpublish": "node ./publish.js"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "tsdx lint"
+    }
+  },
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all",
+    "arrowParens": "always"
+  },
+  "dependencies": {
+    "tekko": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^24.0.23",
+    "gh-pages": "^2.1.1",
+    "husky": "^3.1.0",
+    "prettier": "^1.19.1",
+    "tsdx": "^0.11.0",
+    "tslib": "^1.10.0",
+    "typescript": "^3.7.2"
+  }
+}
