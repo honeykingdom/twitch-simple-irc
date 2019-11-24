@@ -117,7 +117,7 @@ export class Client extends EventEmitter {
 
   private _registered: boolean = false;
 
-  constructor(options: ClientOptions = {}) {
+  constructor(options: ClientOptions | null | undefined = {}) {
     super();
     this.options = { secure: true, ...options };
   }
