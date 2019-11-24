@@ -138,7 +138,13 @@ export interface GlobalUserStateEvent {
 
 export type UserStateTags = Pick<
   ATags,
-  'badgeInfo' | 'badges' | 'color' | 'displayName' | 'emoteSets' | 'mod'
+  | 'badgeInfo'
+  | 'badges'
+  | 'color'
+  | 'displayName'
+  | 'emoteSets'
+  | 'mod'
+  | 'roomId'
 >;
 
 /**
@@ -214,6 +220,11 @@ export interface ClearChatEvent {
      * (Not documented)
      */
     roomId: string;
+
+    /**
+     * (Not documented)
+     */
+    targetUserId?: string;
 
     /**
      * (Not documented)
