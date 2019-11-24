@@ -30,6 +30,7 @@ const tagNamesMap: { [key: string]: string } = {
   'tmi-sent-ts': 'tmiSentTs',
   'user-id': 'userId',
   'target-msg-id': 'targetMsgId',
+  'target-user-id': 'targetUserId',
   'msg-id': 'msgId',
   'system-msg': 'systemMsg',
   'emote-only': 'emoteOnly',
