@@ -132,6 +132,23 @@ export class Client extends EventEmitter {
     return this._register();
   }
 
+  disconnect(): void {
+    if (!this._connected) return;
+
+    if (isNode) {
+      (this.socket as Socket).destroy();
+    } else {
+      (this.socket as WebSocket).close();
+    }
+
+    this.socket = null;
+    this._connected = false;
+    this._connecting = false;
+    this._registered = false;
+
+    this.emit('disconnect');
+  }
+
   receiveRaw(rawData: string) {
     const data = rawData.trim().split('\r\n');
 
