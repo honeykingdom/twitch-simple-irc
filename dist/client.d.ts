@@ -75,8 +75,9 @@ export declare class Client extends EventEmitter {
     private _connected;
     private _connecting;
     private _registered;
-    constructor(options?: ClientOptions);
+    constructor(options?: ClientOptions | null | undefined);
     connect(): Promise<void>;
+    disconnect(): void;
     receiveRaw(rawData: string): void;
     sendRaw(message: string): boolean;
     say(channel: string, message: string): boolean;

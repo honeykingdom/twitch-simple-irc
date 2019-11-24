@@ -68,6 +68,7 @@ var tagNamesMap = {
   'tmi-sent-ts': 'tmiSentTs',
   'user-id': 'userId',
   'target-msg-id': 'targetMsgId',
+  'target-user-id': 'targetUserId',
   'msg-id': 'msgId',
   'system-msg': 'systemMsg',
   'emote-only': 'emoteOnly',
@@ -340,6 +341,22 @@ function (_EventEmitter) {
     } catch (e) {
       return Promise.reject(e);
     }
+  };
+
+  _proto.disconnect = function disconnect() {
+    if (!this._connected) return;
+
+    if (isNode) {
+      this.socket.destroy();
+    } else {
+      this.socket.close();
+    }
+
+    this.socket = null;
+    this._connected = false;
+    this._connecting = false;
+    this._registered = false;
+    this.emit('disconnect');
   };
 
   _proto.receiveRaw = function receiveRaw(rawData) {

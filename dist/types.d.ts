@@ -101,7 +101,7 @@ export interface GlobalUserStateEvent {
     raw: string;
     tags: GlobalUserStateTags;
 }
-export declare type UserStateTags = Pick<ATags, 'badgeInfo' | 'badges' | 'color' | 'displayName' | 'emoteSets' | 'mod'>;
+export declare type UserStateTags = Pick<ATags, 'badgeInfo' | 'badges' | 'color' | 'displayName' | 'emoteSets' | 'mod' | 'roomId'>;
 /**
  * Sends user-state data when a user joins a channel or sends a PRIVMSG to a channel.
  */
@@ -166,6 +166,10 @@ export interface ClearChatEvent {
          * (Not documented)
          */
         roomId: string;
+        /**
+         * (Not documented)
+         */
+        targetUserId?: string;
         /**
          * (Not documented)
          */
