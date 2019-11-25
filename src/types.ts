@@ -138,13 +138,7 @@ export interface GlobalUserStateEvent {
 
 export type UserStateTags = Pick<
   ATags,
-  | 'badgeInfo'
-  | 'badges'
-  | 'color'
-  | 'displayName'
-  | 'emoteSets'
-  | 'mod'
-  | 'roomId'
+  'badgeInfo' | 'badges' | 'color' | 'displayName' | 'emoteSets' | 'mod'
 >;
 
 /**
@@ -156,7 +150,7 @@ export interface UserStateEvent {
   tags: UserStateTags;
 }
 
-export interface RoomStateTags {
+export interface RoomStateTags extends Pick<ATags, 'roomId'> {
   /**
    * Emote-only mode. If enabled, only emotes are allowed in chat.
    */
