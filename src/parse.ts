@@ -1,5 +1,5 @@
 import tekko from 'tekko';
-import { Emotes, BadgeInfo, Badges, TagType, Tags } from './types';
+import { Emotes, BadgeInfo, Badges, TagType } from './types';
 
 const booleanMessageTags = [
   'mod',
@@ -22,7 +22,7 @@ const numberMessageTags = [
   'msg-param-threshold',
 ];
 
-const tagNamesMap: { [key: string]: string } = {
+const tagNamesMap: Record<string, string> = {
   'badge-info': 'badgeInfo',
   'display-name': 'displayName',
   'emote-sets': 'emoteSets',
@@ -131,7 +131,9 @@ const normalizeTagValue = (name: string, value: string): TagType => {
   return value;
 };
 
-export const parseMessageTags = (data?: tekko.MessageTags): Tags => {
+export const parseMessageTags = (
+  data?: tekko.MessageTags,
+): Record<string, TagType> => {
   if (!data) {
     return {};
   }

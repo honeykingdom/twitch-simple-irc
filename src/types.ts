@@ -28,10 +28,6 @@ export interface Badges {
 
 export type TagType = string | boolean | number | Emotes | BadgeInfo | Badges;
 
-export interface Tags {
-  [key: string]: TagType;
-}
-
 interface ATags {
   /**
    * Metadata related to the chat badges in the `badges` tag.
