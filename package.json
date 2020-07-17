@@ -8,7 +8,7 @@
   "module": "dist/twitch-simple-irc.esm.js",
   "typings": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist/**/*"
   ],
   "scripts": {
     "start": "tsdx watch",
