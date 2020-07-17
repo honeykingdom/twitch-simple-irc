@@ -170,6 +170,8 @@ export class Client extends EventEmitter {
   }
 
   say(channel: string, message: string): boolean {
+    if (!message) return false;
+
     const ircMessage = tekko.format({
       command: Commands.PRIVMSG,
       middle: [`#${channel}`],
