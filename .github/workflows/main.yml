@@ -23,6 +23,7 @@ jobs:
           key: nodeModules-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             nodeModules-
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile
         env:
@@ -43,7 +44,11 @@ jobs:
         env:
           CI: true
 
+      - run: node ./scripts/prepublish.js
+
       - name: Publish
-        run: yarn ghpublish
-        env:
-          CI: true
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: master
+          publish_dir: ./public
