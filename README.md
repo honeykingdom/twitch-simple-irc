@@ -6,7 +6,7 @@ Simple Twitch Chat Client
 
 `npm i github:honeykingdom/twitch-simple-irc`
 
-`yarn add https://github.com/honeykingdom/twitch-simple-irc`
+`yarn add github:honeykingdom/twitch-simple-irc`
 
 ## Basic Usage
 

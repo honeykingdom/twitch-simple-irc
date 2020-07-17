@@ -4,12 +4,12 @@ export declare const normalizeGlobalUserState: ({ raw, tags, }: TekkoMessage) =>
 export declare const normalizeState: (data: TekkoMessage) => {
     raw: string;
     channel: string;
-    readonly tags: import("./types").Tags;
+    readonly tags: Record<string, import("./types").TagType>;
 };
 export declare const normalizeCommand: (data: TekkoMessage) => {
     raw: string;
     message: string;
     channel: string;
-    readonly tags: import("./types").Tags;
+    readonly tags: Record<string, import("./types").TagType>;
 };
 export declare const normalizeWhisper: ({ raw, trailing, tags, prefix, middle: [channel], }: TekkoMessage) => WhisperEvent;

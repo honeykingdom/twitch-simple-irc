@@ -1,5 +1,7 @@
 'use strict';
 
+Object.defineProperty(exports, '__esModule', { value: true });
+
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
 var tls = _interopDefault(require('tls'));
@@ -305,9 +307,7 @@ var normalizeWhisper = function normalizeWhisper(_ref2) {
   Commands["WHISPER"] = "WHISPER";
 })(exports.Commands || (exports.Commands = {}));
 
-var Client =
-/*#__PURE__*/
-function (_EventEmitter) {
+var Client = /*#__PURE__*/function (_EventEmitter) {
   _inheritsLoose(Client, _EventEmitter);
 
   function Client(options) {
@@ -385,6 +385,7 @@ function (_EventEmitter) {
   };
 
   _proto.say = function say(channel, message) {
+    if (!message) return false;
     var ircMessage = tekko.format({
       command: exports.Commands.PRIVMSG,
       middle: ["#" + channel],
@@ -670,7 +671,7 @@ function (_EventEmitter) {
   };
 
   _proto._updateGlobalUserState = function _updateGlobalUserState(globalUserState) {
-    this.globalUserState = _extends({}, this.globalUserState, {}, globalUserState);
+    this.globalUserState = _extends({}, this.globalUserState, globalUserState);
   };
 
   _proto._updateUserState = function _updateUserState(channel, userState) {

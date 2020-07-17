@@ -1,3 +1,3 @@
 import tekko from 'tekko';
-import { Tags } from './types';
-export declare const parseMessageTags: (data?: tekko.MessageTags | undefined) => Tags;
+import { TagType } from './types';
+export declare const parseMessageTags: (data?: tekko.MessageTags | undefined) => Record<string, TagType>;

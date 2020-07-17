@@ -25,9 +25,6 @@ export interface Badges {
     turbo?: string;
 }
 export declare type TagType = string | boolean | number | Emotes | BadgeInfo | Badges;
-export interface Tags {
-    [key: string]: TagType;
-}
 interface ATags {
     /**
      * Metadata related to the chat badges in the `badges` tag.
@@ -101,7 +98,7 @@ export interface GlobalUserStateEvent {
     raw: string;
     tags: GlobalUserStateTags;
 }
-export declare type UserStateTags = Pick<ATags, 'badgeInfo' | 'badges' | 'color' | 'displayName' | 'emoteSets' | 'mod' | 'roomId'>;
+export declare type UserStateTags = Pick<ATags, 'badgeInfo' | 'badges' | 'color' | 'displayName' | 'emoteSets' | 'mod'>;
 /**
  * Sends user-state data when a user joins a channel or sends a PRIVMSG to a channel.
  */
@@ -110,7 +107,7 @@ export interface UserStateEvent {
     channel: string;
     tags: UserStateTags;
 }
-export interface RoomStateTags {
+export interface RoomStateTags extends Pick<ATags, 'roomId'> {
     /**
      * Emote-only mode. If enabled, only emotes are allowed in chat.
      */
