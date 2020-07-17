@@ -277,7 +277,7 @@ export class Client extends EventEmitter {
 
     if (command === Commands.ROOMSTATE) {
       const channel = getChannelFromMessage(data);
-      const eventData = normalizeState(data) as RoomStateEvent;
+      const eventData = (normalizeState(data) as unknown) as RoomStateEvent;
 
       this._updateRoomState(channel, eventData.tags);
       this.emit('roomstate', eventData);
