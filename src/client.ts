@@ -161,7 +161,7 @@ export class Client extends EventEmitter {
     }
 
     if (isNode) {
-      (this.socket as Socket).write(message);
+      (this.socket as Socket).write(`${message}\r\n`);
     } else {
       (this.socket as WebSocket).send(message);
     }
