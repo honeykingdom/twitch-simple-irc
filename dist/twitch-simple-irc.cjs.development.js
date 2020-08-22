@@ -307,6 +307,8 @@ var normalizeWhisper = function normalizeWhisper(_ref2) {
   Commands["WHISPER"] = "WHISPER";
 })(exports.Commands || (exports.Commands = {}));
 
+var RECONNECT_BASE_INTERVAL = 2000;
+var MAX_RECONNECT_INTERVAL = 60 * 1000;
 var Client = /*#__PURE__*/function (_EventEmitter) {
   _inheritsLoose(Client, _EventEmitter);
 
@@ -324,8 +326,10 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
     _this._connected = false;
     _this._connecting = false;
     _this._registered = false;
+    _this._reconnectInterval = RECONNECT_BASE_INTERVAL;
     _this.options = _extends({
-      secure: true
+      secure: true,
+      reconnect: true
     }, options);
     return _this;
   }
@@ -361,12 +365,37 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
     this.emit('disconnect');
   };
 
-  _proto.receiveRaw = function receiveRaw(rawData) {
+  _proto.reconnect = function reconnect() {
     var _this4 = this;
+
+    if (this._connected) return;
+    var interval = Math.min(MAX_RECONNECT_INTERVAL, this._reconnectInterval);
+    setTimeout(function () {
+      try {
+        return Promise.resolve(_this4.connect()).then(function () {
+          if (_this4._connected && _this4._registered) {
+            _this4._reconnectInterval = RECONNECT_BASE_INTERVAL;
+            Object.keys(_this4.channels).map(function (channel) {
+              return _this4.join(channel);
+            });
+          } else {
+            _this4._reconnectInterval *= 2;
+
+            _this4.reconnect();
+          }
+        });
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    }, interval);
+  };
+
+  _proto.receiveRaw = function receiveRaw(rawData) {
+    var _this5 = this;
 
     var data = rawData.trim().split('\r\n');
     data.forEach(function (line) {
-      return _this4._handleMessage(line);
+      return _this5._handleMessage(line);
     });
   };
 
@@ -547,101 +576,109 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
   };
 
   _proto._connectInNode = function _connectInNode() {
-    var _this5 = this;
+    var _this6 = this;
 
     var host = 'irc.chat.twitch.tv';
     var port = this.options.secure ? 6697 : 6667;
     return new Promise(function (resolve, reject) {
-      _this5._connecting = true;
+      _this6._connecting = true;
 
       var handleConnect = function handleConnect() {
-        _this5._connecting = false;
-        _this5._connected = true;
-
-        _this5.emit('connect');
-
-        resolve();
-      };
-
-      if (_this5.options.secure) {
-        _this5.socket = tls.connect(port, host, {}, handleConnect);
-      } else {
-        _this5.socket = new net.Socket();
-
-        _this5.socket.connect(port, host, handleConnect);
-      }
-
-      _this5.socket.on('error', function (error) {
-        _this5._connected = false;
-        _this5._connecting = false;
-
-        _this5.emit('disconnect', error);
-
-        reject(error);
-      });
-
-      _this5.socket.on('data', function (data) {
-        _this5.receiveRaw(data.toString());
-      });
-
-      _this5.socket.on('close', function () {
-        _this5._connected = false;
-        _this5._connecting = false;
-        _this5._registered = false;
-
-        _this5.emit('disconnect');
-      });
-    });
-  };
-
-  _proto._connectInBrowser = function _connectInBrowser() {
-    var _this6 = this;
-
-    var url = this.options.secure ? 'wss://irc-ws.chat.twitch.tv:443' : 'ws://irc-ws.chat.twitch.tv:80';
-    return new Promise(function (resolve, reject) {
-      _this6._connecting = true;
-      _this6.socket = new WebSocket(url);
-
-      _this6.socket.onopen = function () {
-        _this6._connected = true;
         _this6._connecting = false;
+        _this6._connected = true;
 
         _this6.emit('connect');
 
         resolve();
       };
 
-      _this6.socket.onmessage = function (_ref) {
-        var data = _ref.data;
-        return _this6.receiveRaw(data);
-      };
+      if (_this6.options.secure) {
+        _this6.socket = tls.connect(port, host, {}, handleConnect);
+      } else {
+        _this6.socket = new net.Socket();
 
-      _this6.socket.onerror = function () {};
+        _this6.socket.connect(port, host, handleConnect);
+      }
 
-      _this6.socket.onclose = function (_ref2) {
-        var wasClean = _ref2.wasClean,
-            code = _ref2.code,
-            reason = _ref2.reason;
-        _this6.socket = null;
+      _this6.socket.on('error', function (error) {
+        _this6._connected = false;
+        _this6._connecting = false;
+
+        _this6.emit('disconnect', error);
+
+        reject(error);
+
+        if (_this6.options.reconnect) {
+          _this6.reconnect();
+        }
+      });
+
+      _this6.socket.on('data', function (data) {
+        _this6.receiveRaw(data.toString());
+      });
+
+      _this6.socket.on('close', function () {
         _this6._connected = false;
         _this6._connecting = false;
         _this6._registered = false;
 
+        _this6.emit('disconnect');
+      });
+    });
+  };
+
+  _proto._connectInBrowser = function _connectInBrowser() {
+    var _this7 = this;
+
+    var url = this.options.secure ? 'wss://irc-ws.chat.twitch.tv:443' : 'ws://irc-ws.chat.twitch.tv:80';
+    return new Promise(function (resolve, reject) {
+      _this7._connecting = true;
+      _this7.socket = new WebSocket(url);
+
+      _this7.socket.onopen = function () {
+        _this7._connected = true;
+        _this7._connecting = false;
+
+        _this7.emit('connect');
+
+        resolve();
+      };
+
+      _this7.socket.onmessage = function (_ref) {
+        var data = _ref.data;
+        return _this7.receiveRaw(data);
+      };
+
+      _this7.socket.onerror = function () {};
+
+      _this7.socket.onclose = function (_ref2) {
+        var wasClean = _ref2.wasClean,
+            code = _ref2.code,
+            reason = _ref2.reason;
+        _this7.socket = null;
+        _this7._connected = false;
+        _this7._connecting = false;
+        _this7._registered = false;
+
         if (wasClean) {
-          _this6.emit('disconnect');
+          _this7.emit('disconnect');
         } else {
           var error = new Error("[" + code + "] " + reason);
 
-          _this6.emit('disconnect', error);
+          _this7.emit('disconnect', error);
 
           reject(error);
+        }
+
+        if (_this7.options.reconnect) {
+          _this7.reconnect();
         }
       };
     });
   };
 
   _proto._register = function _register() {
-    var _this7 = this;
+    var _this8 = this;
 
     if (!this._connected) return Promise.reject();
     if (this._registered) return Promise.resolve();
@@ -657,15 +694,15 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
       var handleRegister = function handleRegister() {
         resolve();
 
-        _this7.off('register', handleRegister);
+        _this8.off('register', handleRegister);
       };
 
-      _this7.on('register', handleRegister);
+      _this8.on('register', handleRegister);
 
       setTimeout(function () {
         reject();
 
-        _this7.off('register', handleRegister);
+        _this8.off('register', handleRegister);
       }, 10000);
     });
   };

@@ -23,6 +23,7 @@ interface ClientOptions {
     name?: string;
     auth?: string;
     secure?: boolean;
+    reconnect?: boolean;
 }
 interface Channels {
     [channel: string]: {
@@ -75,9 +76,11 @@ export declare class Client extends EventEmitter {
     private _connected;
     private _connecting;
     private _registered;
+    private _reconnectInterval;
     constructor(options?: ClientOptions | null | undefined);
     connect(): Promise<void>;
     disconnect(): void;
+    reconnect(): void;
     receiveRaw(rawData: string): void;
     sendRaw(message: string): boolean;
     say(channel: string, message: string): boolean;
