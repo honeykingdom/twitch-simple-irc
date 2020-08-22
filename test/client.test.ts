@@ -30,7 +30,7 @@ it('handle PING command', () => {
   client._handleMessage('PING');
 
   expect(client.socket.write.mock.calls.length).toBe(1);
-  expect(client.socket.write.mock.calls[0][0]).toBe('PONG :tmi.twitch.tv');
+  expect(client.socket.write.mock.calls[0][0]).toBe('PONG :tmi.twitch.tv\r\n');
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0][0]).toEqual({ raw: 'PING' });
 });
@@ -335,7 +335,7 @@ it('sends a message', () => {
   const noticeWithMessageError = `@msg-id=msg_ratelimit :tmi.twitch.tv NOTICE #dmitryscaletta :Your message was not sent because you are sending messages too quickly.`;
 
   const message1 = 'Hello world!';
-  const sendedResult = `PRIVMSG #dmitryscaletta :${message1}`;
+  const sendedResult = `PRIVMSG #dmitryscaletta :${message1}\r\n`;
 
   // initialize channel with some data
   client._handleMessage(message101);
