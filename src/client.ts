@@ -49,10 +49,14 @@ export enum Commands {
   WHISPER = 'WHISPER',
 }
 
+const RECONNECT_BASE_INTERVAL = 2000;
+const MAX_RECONNECT_INTERVAL = 60 * 1000;
+
 interface ClientOptions {
   name?: string;
   auth?: string;
   secure?: boolean;
+  reconnect?: boolean;
 }
 
 interface Channels {
@@ -111,15 +115,17 @@ export class Client extends EventEmitter {
 
   channels: Channels = {};
 
-  private _connected: boolean = false;
+  private _connected = false;
 
-  private _connecting: boolean = false;
+  private _connecting = false;
 
-  private _registered: boolean = false;
+  private _registered = false;
+
+  private _reconnectInterval = RECONNECT_BASE_INTERVAL;
 
   constructor(options: ClientOptions | null | undefined = {}) {
     super();
-    this.options = { secure: true, ...options };
+    this.options = { secure: true, reconnect: true, ...options };
   }
 
   async connect(): Promise<void> {
@@ -132,7 +138,7 @@ export class Client extends EventEmitter {
     return this._register();
   }
 
-  disconnect(): void {
+  disconnect() {
     if (!this._connected) return;
 
     if (isNode) {
@@ -147,6 +153,25 @@ export class Client extends EventEmitter {
     this._registered = false;
 
     this.emit('disconnect');
+  }
+
+  reconnect() {
+    if (this._connected) return;
+
+    const interval = Math.min(MAX_RECONNECT_INTERVAL, this._reconnectInterval);
+
+    setTimeout(async () => {
+      await this.connect();
+
+      if (this._connected && this._registered) {
+        this._reconnectInterval = RECONNECT_BASE_INTERVAL;
+
+        Object.keys(this.channels).map((channel) => this.join(channel));
+      } else {
+        this._reconnectInterval *= 2;
+        this.reconnect();
+      }
+    }, interval);
   }
 
   receiveRaw(rawData: string) {
@@ -368,7 +393,12 @@ export class Client extends EventEmitter {
         this._connected = false;
         this._connecting = false;
         this.emit('disconnect', error);
+
         reject(error);
+
+        if (this.options.reconnect) {
+          this.reconnect();
+        }
       });
       this.socket.on('data', (data: Buffer) => {
         this.receiveRaw(data.toString());
@@ -411,6 +441,10 @@ export class Client extends EventEmitter {
           const error = new Error(`[${code}] ${reason}`);
           this.emit('disconnect', error);
           reject(error);
+        }
+
+        if (this.options.reconnect) {
+          this.reconnect();
         }
       };
     });
