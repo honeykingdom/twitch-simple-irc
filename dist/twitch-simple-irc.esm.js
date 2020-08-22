@@ -372,7 +372,7 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
     }
 
     if (isNode) {
-      this.socket.write(message);
+      this.socket.write(message + "\r\n");
     } else {
       this.socket.send(message);
     }
