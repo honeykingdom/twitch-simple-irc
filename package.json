@@ -1,9 +1,13 @@
 {
-  "name": "twitch-simple-irc",
+  "name": "@honeykingdom/twitch-simple-irc",
   "version": "0.1.0",
   "license": "MIT",
   "author": "DmitryScaletta",
   "description": "Simple Twitch Chat Client",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/honeykingdom/twitch-simple-irc.git"
+  },
   "main": "dist/index.js",
   "module": "dist/twitch-simple-irc.esm.js",
   "typings": "dist/index.d.ts",
