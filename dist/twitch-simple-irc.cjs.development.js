@@ -308,7 +308,12 @@ var normalizeWhisper = function normalizeWhisper(_ref2) {
 })(exports.Commands || (exports.Commands = {}));
 
 var RECONNECT_BASE_INTERVAL = 2000;
-var MAX_RECONNECT_INTERVAL = 60 * 1000;
+var MAX_RECONNECT_INTERVAL = 60 * 1000; // 1 min
+
+var PING_INTERVAL = 5 * 60 * 1000; // 5 min
+
+var PING_RESPONSE_INTERVAL = 5 * 1000; // 5 sec
+
 var Client = /*#__PURE__*/function (_EventEmitter) {
   _inheritsLoose(Client, _EventEmitter);
 
@@ -327,6 +332,7 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
     _this._connecting = false;
     _this._registered = false;
     _this._reconnectInterval = RECONNECT_BASE_INTERVAL;
+    _this._pingInterval = null;
     _this.options = _extends({
       secure: true,
       reconnect: true
@@ -362,6 +368,7 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
     this._connected = false;
     this._connecting = false;
     this._registered = false;
+    this._pingInterval = null;
     this.emit('disconnect');
   };
 
@@ -463,6 +470,13 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
     if (command === exports.Commands.PING) {
       this.sendRaw(exports.Commands.PONG + " :tmi.twitch.tv");
       this.emit('ping', {
+        raw: raw
+      });
+      return;
+    }
+
+    if (command === exports.Commands.PONG) {
+      this.emit('pong', {
         raw: raw
       });
       return;
@@ -695,6 +709,8 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
         resolve();
 
         _this8.off('register', handleRegister);
+
+        _this8._pingInterval = _this8._setPingInterval();
       };
 
       _this8.on('register', handleRegister);
@@ -705,6 +721,35 @@ var Client = /*#__PURE__*/function (_EventEmitter) {
         _this8.off('register', handleRegister);
       }, 10000);
     });
+  };
+
+  _proto._setPingInterval = function _setPingInterval() {
+    var _this9 = this;
+
+    var disconnectTimeout = null;
+
+    var setDisconnectTimeout = function setDisconnectTimeout() {
+      return setTimeout(function () {
+        clearInterval(_this9._pingInterval);
+
+        _this9.removeAllListeners('pong');
+
+        _this9.disconnect();
+
+        _this9.reconnect();
+      }, PING_RESPONSE_INTERVAL);
+    };
+
+    var handlePong = function handlePong() {
+      clearTimeout(disconnectTimeout);
+    };
+
+    this.on('pong', handlePong);
+    return setInterval(function () {
+      disconnectTimeout = setDisconnectTimeout();
+
+      _this9.sendRaw('PING');
+    }, PING_INTERVAL);
   };
 
   _proto._updateGlobalUserState = function _updateGlobalUserState(globalUserState) {

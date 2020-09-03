@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { Socket } from 'net';
 import { EventEmitter } from 'events';
-import { MessageEvent, GlobalUserStateEvent, GlobalUserStateTags, UserStateEvent, UserStateTags, RoomStateEvent, RoomStateTags, ClearChatEvent, ClearMessageEvent, HostTargetEvent, NoticeEvent, UserNoticeEvent, WhisperEvent, JoinEvent, PartEvent, PingEvent } from './types';
+import { MessageEvent, GlobalUserStateEvent, GlobalUserStateTags, UserStateEvent, UserStateTags, RoomStateEvent, RoomStateTags, ClearChatEvent, ClearMessageEvent, HostTargetEvent, NoticeEvent, UserNoticeEvent, WhisperEvent, JoinEvent, PartEvent, PingEvent, PongEvent } from './types';
 export declare enum Commands {
     REPLY001 = "001",
     PING = "PING",
@@ -49,6 +49,7 @@ export interface Client {
     on(event: 'clearmessage', listener: Listener<ClearMessageEvent>): this;
     on(event: 'hosttarget', listener: Listener<HostTargetEvent>): this;
     on(event: 'ping', listener: Listener<PingEvent>): this;
+    on(event: 'pong', listener: Listener<PongEvent>): this;
     on(event: 'error', listener: (error: Error) => void): this;
     emit(event: 'connect'): boolean;
     emit(event: 'disconnect', error?: Error): boolean;
@@ -66,6 +67,7 @@ export interface Client {
     emit(event: 'clearmessage', data: ClearMessageEvent): boolean;
     emit(event: 'hosttarget', data: HostTargetEvent): boolean;
     emit(event: 'ping', data: PingEvent): boolean;
+    emit(event: 'pong', data: PongEvent): boolean;
     emit(event: 'error', error: Error): boolean;
 }
 export declare class Client extends EventEmitter {
@@ -77,6 +79,7 @@ export declare class Client extends EventEmitter {
     private _connecting;
     private _registered;
     private _reconnectInterval;
+    private _pingInterval;
     constructor(options?: ClientOptions | null | undefined);
     connect(): Promise<void>;
     disconnect(): void;
@@ -91,6 +94,7 @@ export declare class Client extends EventEmitter {
     _connectInNode(): Promise<void>;
     _connectInBrowser(): Promise<void>;
     _register(): Promise<void>;
+    _setPingInterval(): NodeJS.Timeout;
     _updateGlobalUserState(globalUserState: GlobalUserStateTags): void;
     _updateUserState(channel: string, userState: UserStateTags): void;
     _updateRoomState(channel: string, roomState: RoomStateTags): void;
