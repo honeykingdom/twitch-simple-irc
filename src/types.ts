@@ -582,6 +582,10 @@ export interface PingEvent {
   raw: string;
 }
 
+export interface PongEvent {
+  raw: string;
+}
+
 /**
  * Join a channel.
  */

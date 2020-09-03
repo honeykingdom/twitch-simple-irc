@@ -21,6 +21,7 @@ import {
   JoinEvent,
   PartEvent,
   PingEvent,
+  PongEvent,
 } from './types';
 import { isNode, getChannelFromMessage, getRandomUsername } from './utils';
 import {
@@ -85,6 +86,7 @@ export interface Client {
   on(event: 'clearmessage', listener: Listener<ClearMessageEvent>): this;
   on(event: 'hosttarget', listener: Listener<HostTargetEvent>): this;
   on(event: 'ping', listener: Listener<PingEvent>): this;
+  on(event: 'pong', listener: Listener<PongEvent>): this;
   on(event: 'error', listener: (error: Error) => void): this;
 
   emit(event: 'connect'): boolean;
@@ -103,6 +105,7 @@ export interface Client {
   emit(event: 'clearmessage', data: ClearMessageEvent): boolean;
   emit(event: 'hosttarget', data: HostTargetEvent): boolean;
   emit(event: 'ping', data: PingEvent): boolean;
+  emit(event: 'pong', data: PongEvent): boolean;
   emit(event: 'error', error: Error): boolean;
 }
 
@@ -251,6 +254,12 @@ export class Client extends EventEmitter {
     if (command === Commands.PING) {
       this.sendRaw(`${Commands.PONG} :tmi.twitch.tv`);
       this.emit('ping', { raw });
+
+      return;
+    }
+
+    if (command === Commands.PONG) {
+      this.emit('pong', { raw });
 
       return;
     }
