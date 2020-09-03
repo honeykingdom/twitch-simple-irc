@@ -51,7 +51,9 @@ export enum Commands {
 }
 
 const RECONNECT_BASE_INTERVAL = 2000;
-const MAX_RECONNECT_INTERVAL = 60 * 1000;
+const MAX_RECONNECT_INTERVAL = 60 * 1000; // 1 min
+const PING_INTERVAL = 5 * 60 * 1000; // 5 min
+const PING_RESPONSE_INTERVAL = 5 * 1000; // 5 sec
 
 interface ClientOptions {
   name?: string;
@@ -126,6 +128,8 @@ export class Client extends EventEmitter {
 
   private _reconnectInterval = RECONNECT_BASE_INTERVAL;
 
+  private _pingInterval: ReturnType<typeof setInterval> | null = null;
+
   constructor(options: ClientOptions | null | undefined = {}) {
     super();
     this.options = { secure: true, reconnect: true, ...options };
@@ -154,6 +158,7 @@ export class Client extends EventEmitter {
     this._connected = false;
     this._connecting = false;
     this._registered = false;
+    this._pingInterval = null;
 
     this.emit('disconnect');
   }
@@ -476,6 +481,7 @@ export class Client extends EventEmitter {
       const handleRegister = () => {
         resolve();
         this.off('register', handleRegister);
+        this._pingInterval = this._setPingInterval();
       };
 
       this.on('register', handleRegister);
@@ -485,6 +491,31 @@ export class Client extends EventEmitter {
         this.off('register', handleRegister);
       }, 10000);
     });
+  }
+
+  _setPingInterval() {
+    let disconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const setDisconnectTimeout = () =>
+      setTimeout(() => {
+        clearInterval(this._pingInterval!);
+
+        this.removeAllListeners('pong');
+        this.disconnect();
+        this.reconnect();
+      }, PING_RESPONSE_INTERVAL);
+
+    const handlePong = () => {
+      clearTimeout(disconnectTimeout!);
+    };
+
+    this.on('pong', handlePong);
+
+    return setInterval(() => {
+      disconnectTimeout = setDisconnectTimeout();
+
+      this.sendRaw('PING');
+    }, PING_INTERVAL);
   }
 
   _updateGlobalUserState(globalUserState: GlobalUserStateTags) {
