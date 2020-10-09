@@ -4,6 +4,7 @@ import * as tekko from 'tekko';
 import { Client } from '../src/client';
 import { parseMessageTags } from '../src/parse';
 
+// @ts-expect-error
 global.WebSocket = WebSocket;
 
 // @ts-expect-error
