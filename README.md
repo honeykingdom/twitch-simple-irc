@@ -11,18 +11,32 @@ Simple Twitch Chat Client
 ## Basic Usage
 
 ```javascript
-import { Client } from 'twitch-simple-irc';
-
-const client = new Client(/* options */);
-
-client.on('message', (data) => {
-  console.log(data);
-});
+import twitchIrc from 'twitch-simple-irc';
 
 const main = async () => {
-  await client.connect();
+  const client = twitchIrc.Client.create({
+    name: 'username',
+    auth: 'authToken',
+    connection: {
+      type: 'ws', // or 'tcp'
+      secure: true,
+      reconnect: true,
+    },
+  });
 
-  client.join('forsen');
+  client.on('message', (data) => {
+    console.log(data);
+  });
+
+  try {
+    await client.connect();
+  } catch (error) {
+    console.log(error);
+  }
+
+  await client.join('forsen');
+
+  client.say('Hello world!');
 };
 
 main();
