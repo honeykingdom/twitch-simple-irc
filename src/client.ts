@@ -23,7 +23,7 @@ import {
   PingEvent,
   PongEvent,
 } from './types';
-import { isNode, getChannelFromMessage, getRandomUsername } from './utils';
+import { getChannelFromMessage, getRandomUsername } from './utils';
 import {
   normalizeChatMessage,
   normalizeState,
@@ -50,16 +50,51 @@ export enum Commands {
   WHISPER = 'WHISPER',
 }
 
-const RECONNECT_BASE_INTERVAL = 2000;
+const REGISTER_RESPONSE_TIMEOUT = 2000;
+const PING_RESPONSE_TIMEOUT = 2000;
+const PING_TIMEOUT = 5 * 60 * 1000; // 5 min
+const RECONNECT_BASE_INTERVAL = 1000;
 const MAX_RECONNECT_INTERVAL = 60 * 1000; // 1 min
-const PING_INTERVAL = 5 * 60 * 1000; // 5 min
-const PING_RESPONSE_INTERVAL = 5 * 1000; // 5 sec
+
+interface IConnection {
+  secure: boolean;
+  reconnect: boolean;
+}
+
+interface ConnectionTypeTcp extends IConnection {
+  type: 'tcp';
+  host: string;
+  port: number;
+  socket: Socket | null;
+}
+
+interface ConnectionTypeWs extends IConnection {
+  type: 'ws';
+  url: string;
+  secure: boolean;
+  socket: WebSocket | null;
+}
+
+type Connection = ConnectionTypeTcp | ConnectionTypeWs;
 
 interface ClientOptions {
   name?: string;
   auth?: string;
-  secure?: boolean;
   reconnect?: boolean;
+  connection?:
+    | {
+        type: 'tcp';
+        host?: string;
+        port?: number;
+        secure?: boolean;
+        reconnect?: boolean;
+      }
+    | {
+        type: 'ws';
+        url?: string;
+        secure?: boolean;
+        reconnect?: boolean;
+      };
 }
 
 interface Channels {
@@ -73,7 +108,8 @@ type Listener<T> = (data: T) => void;
 
 export interface Client {
   on(event: 'connect', listener: () => void): this;
-  on(event: 'disconnect', listener: (error?: Error) => void): this;
+  on(event: 'disconnect', listener: (error: Error) => void): this;
+  on(event: '_disconnect', listener: (error: Error) => void): this;
   on(event: 'register', listener: () => void): this;
   on(event: 'message', listener: Listener<MessageEvent>): this;
   on(event: 'notice', listener: Listener<NoticeEvent>): this;
@@ -92,7 +128,8 @@ export interface Client {
   on(event: 'error', listener: (error: Error) => void): this;
 
   emit(event: 'connect'): boolean;
-  emit(event: 'disconnect', error?: Error): boolean;
+  emit(event: 'disconnect', error: Error): boolean;
+  emit(event: '_disconnect', error: Error): boolean;
   emit(event: 'register'): boolean;
   emit(event: 'message', data: MessageEvent): boolean;
   emit(event: 'notice', data: NoticeEvent): boolean;
@@ -112,91 +149,257 @@ export interface Client {
 }
 
 export class Client extends EventEmitter {
-  socket: WebSocket | Socket | null = null;
-
-  options: ClientOptions;
+  private name: string;
+  private auth: string;
+  private connection: Connection;
 
   globalUserState: GlobalUserStateTags | null = null;
-
   channels: Channels = {};
 
-  private _connected = false;
+  connected = false;
+  connecting = false;
+  registered = false;
 
-  private _connecting = false;
-
-  private _registered = false;
-
-  private _reconnectInterval = RECONNECT_BASE_INTERVAL;
-
-  private _pingInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnecting = false;
+  private reconnectInterval = RECONNECT_BASE_INTERVAL;
+  private pingTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: ClientOptions | null | undefined = {}) {
     super();
-    this.options = { secure: true, reconnect: true, ...options };
+
+    this.name = options?.name || getRandomUsername();
+    this.auth = options?.auth ? `oauth:${options.auth}` : 'SCHMOOPIIE';
+
+    const { secure = true, reconnect = true } = options?.connection || {};
+
+    if (options?.connection?.type === 'tcp') {
+      this.connection = {
+        type: 'tcp',
+        host: options?.connection?.host || 'irc.chat.twitch.tv',
+        port: options?.connection?.port || (secure ? 6697 : 6667),
+        secure,
+        reconnect,
+        socket: null,
+      };
+    } else {
+      this.connection = {
+        type: 'ws',
+        url:
+          (options?.connection as ConnectionTypeWs)?.url ||
+          (secure
+            ? 'wss://irc-ws.chat.twitch.tv:443'
+            : 'ws://irc-ws.chat.twitch.tv:80'),
+        secure,
+        reconnect,
+        socket: null,
+      };
+    }
+  }
+
+  static create(options: Partial<ClientOptions> | null | undefined = {}) {
+    return new Client(options);
   }
 
   async connect(): Promise<void> {
-    const connection = isNode
-      ? this._connectInNode()
-      : this._connectInBrowser();
+    const connection =
+      this.connection.type === 'tcp'
+        ? this.connectTcp(this.connection)
+        : this.connectWs(this.connection);
 
     await connection;
 
-    return this._register();
+    this.once('_disconnect', (error) => {
+      this.clearAfterDisconnect();
+      this.emit('disconnect', error);
+
+      if (this.connection.reconnect) {
+        this.reconnect();
+      }
+    });
+
+    return this.register();
   }
 
-  disconnect() {
-    if (!this._connected) return;
-
-    if (isNode) {
-      (this.socket as Socket).destroy();
+  clearAfterDisconnect() {
+    if (this.connection.type === 'tcp') {
+      this.connection.socket?.destroy();
     } else {
-      (this.socket as WebSocket).close();
+      this.connection.socket?.close();
     }
 
-    this.socket = null;
-    this._connected = false;
-    this._connecting = false;
-    this._registered = false;
-    this._pingInterval = null;
+    if (this.pingTimeout) {
+      clearTimeout(this.pingTimeout);
+    }
 
-    this.emit('disconnect');
+    this.connection.socket = null;
+    this.connected = false;
+    this.connecting = false;
+    this.registered = false;
+    this.reconnecting = false;
+    this.pingTimeout = null;
   }
 
-  reconnect() {
-    if (this._connected) return;
+  private reconnect() {
+    if (this.connected || this.reconnecting) return;
 
-    const interval = Math.min(MAX_RECONNECT_INTERVAL, this._reconnectInterval);
+    const interval = Math.min(MAX_RECONNECT_INTERVAL, this.reconnectInterval);
 
     setTimeout(async () => {
-      await this.connect();
+      this.reconnecting = true;
 
-      if (this._connected && this._registered) {
-        this._reconnectInterval = RECONNECT_BASE_INTERVAL;
+      try {
+        await this.connect();
+      } catch {}
+
+      this.reconnecting = false;
+
+      if (this.connected && this.registered) {
+        this.reconnectInterval = RECONNECT_BASE_INTERVAL;
 
         Object.keys(this.channels).map((channel) => this.join(channel));
       } else {
-        this._reconnectInterval *= 2;
+        this.reconnectInterval *= 2;
+        this.clearAfterDisconnect();
         this.reconnect();
       }
     }, interval);
   }
 
-  receiveRaw(rawData: string) {
+  private connectTcp({ host, port }: ConnectionTypeTcp): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.connecting = true;
+
+      const handleConnect = () => {
+        this.connecting = false;
+        this.connected = true;
+        this.emit('connect');
+        resolve();
+      };
+
+      if (this.connection.secure) {
+        this.connection.socket = tls.connect(port, host, {}, handleConnect);
+      } else {
+        this.connection.socket = new Socket();
+        this.connection.socket.connect(port, host, handleConnect);
+      }
+
+      this.connection.socket.on('error', (error: Error) => {
+        reject(error);
+
+        this.emit('_disconnect', error);
+      });
+
+      this.connection.socket.on('data', (data: Buffer) => {
+        this.receiveRaw(data.toString());
+      });
+    });
+  }
+
+  private connectWs({ url }: ConnectionTypeWs): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.connecting = true;
+
+      this.connection.socket = new WebSocket(url);
+
+      this.connection.socket.onopen = () => {
+        this.connected = true;
+        this.connecting = false;
+        this.emit('connect');
+        resolve();
+      };
+
+      this.connection.socket.onmessage = ({ data }) => this.receiveRaw(data);
+
+      this.connection.socket.onerror = () => {};
+
+      this.connection.socket.onclose = ({ code, reason }) => {
+        const error = Error(`[${code}] ${reason}`);
+
+        reject(error);
+
+        this.emit('_disconnect', error);
+      };
+    });
+  }
+
+  private register(): Promise<void> {
+    if (!this.connected) return Promise.reject();
+    if (this.registered) return Promise.resolve();
+
+    this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    this.sendRaw(`PASS ${this.auth}`);
+    this.sendRaw(`NICK ${this.name}`);
+
+    return new Promise<void>((resolve, reject) => {
+      const handleRegister = () => {
+        resolve();
+        this.setPingTimeout();
+        this.off('register', handleRegister);
+      };
+
+      this.on('register', handleRegister);
+
+      setTimeout(() => {
+        reject();
+        this.off('register', handleRegister);
+      }, REGISTER_RESPONSE_TIMEOUT);
+    });
+  }
+
+  private sendPing(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const handlePong = () => {
+        resolve(true);
+        this.off('pong', handlePong);
+      };
+
+      this.on('pong', handlePong);
+
+      setTimeout(() => {
+        resolve(false);
+        this.off('pong', handlePong);
+      }, PING_RESPONSE_TIMEOUT);
+
+      this.sendRaw('PING');
+    });
+  }
+
+  private async setPingTimeout() {
+    const makePingTimeout = () =>
+      setTimeout(() => {
+        this.setPingTimeout();
+      }, PING_TIMEOUT);
+
+    if (this.pingTimeout === null) {
+      this.pingTimeout = makePingTimeout();
+
+      return;
+    }
+
+    const pongReceived = await this.sendPing();
+
+    if (pongReceived) {
+      this.pingTimeout = makePingTimeout();
+    } else {
+      this.emit('_disconnect', Error('Server did not PONG back'));
+    }
+  }
+
+  private receiveRaw(rawData: string) {
     const data = rawData.trim().split('\r\n');
 
-    data.forEach((line) => this._handleMessage(line));
+    data.forEach((line) => this.handleMessage(line));
   }
 
   sendRaw(message: string): boolean {
-    if (this.socket === null || !message) {
+    if (this.connection.socket === null || !message) {
       return false;
     }
 
-    if (isNode) {
-      (this.socket as Socket).write(`${message}\r\n`);
+    if (this.connection.type === 'tcp') {
+      this.connection.socket.write(`${message}\r\n`);
     } else {
-      (this.socket as WebSocket).send(message);
+      this.connection.socket.send(message);
     }
 
     return true;
@@ -229,29 +432,61 @@ export class Client extends EventEmitter {
     return this.sendRaw(ircMessage);
   }
 
-  join(channel: string): boolean {
-    if (!this._registered) return false;
+  join(channel: string): Promise<boolean> {
+    if (!this.registered) return Promise.reject();
 
     const ircMessage = tekko.format({
       command: Commands.JOIN,
       middle: [`#${channel}`],
     });
 
-    return this.sendRaw(ircMessage);
+    this.sendRaw(ircMessage);
+
+    return new Promise((resolve) => {
+      const handleJoin = (joinEvent: JoinEvent) => {
+        if (joinEvent.channel === channel) {
+          resolve(true);
+          this.off('join', handleJoin);
+        }
+      };
+
+      this.on('join', handleJoin);
+
+      setTimeout(() => {
+        resolve(false);
+        this.off('join', handleJoin);
+      }, 2000);
+    });
   }
 
-  part(channel: string): boolean {
-    if (!this._registered) return false;
+  part(channel: string): Promise<boolean> {
+    if (!this.registered) return Promise.resolve(false);
 
     const ircMessage = tekko.format({
       command: Commands.PART,
       middle: [`#${channel}`],
     });
 
-    return this.sendRaw(ircMessage);
+    this.sendRaw(ircMessage);
+
+    return new Promise((resolve) => {
+      const handlePart = (partEvent: PartEvent) => {
+        if (partEvent.channel === channel) {
+          resolve(true);
+          this.off('part', handlePart);
+        }
+      };
+
+      this.on('join', handlePart);
+
+      setTimeout(() => {
+        resolve(false);
+        this.off('join', handlePart);
+      }, 2000);
+    });
   }
 
-  _handleMessage(raw: string) {
+  private handleMessage(raw: string) {
     const data: TekkoMessage = tekko.parse(raw) as TekkoMessage;
     data.raw = raw;
     const { command } = data;
@@ -270,8 +505,8 @@ export class Client extends EventEmitter {
     }
 
     if (command === Commands.REPLY001) {
-      this.options.name = data.middle[0];
-      this._registered = true;
+      this.name = data.middle[0];
+      this.registered = true;
 
       this.emit('register');
 
@@ -290,7 +525,7 @@ export class Client extends EventEmitter {
       const channel = getChannelFromMessage(data);
       const eventData = normalizeState(data) as UserStateEvent;
 
-      this._updateUserState(channel, eventData.tags);
+      this.updateUserState(channel, eventData.tags);
       this.emit('userstate', eventData);
 
       return;
@@ -318,7 +553,7 @@ export class Client extends EventEmitter {
       const channel = getChannelFromMessage(data);
       const eventData = (normalizeState(data) as unknown) as RoomStateEvent;
 
-      this._updateRoomState(channel, eventData.tags);
+      this.updateRoomState(channel, eventData.tags);
       this.emit('roomstate', eventData);
 
       return;
@@ -375,154 +610,18 @@ export class Client extends EventEmitter {
     if (command === Commands.GLOBALUSERSTATE) {
       const eventData = normalizeGlobalUserState(data);
 
-      this._updateGlobalUserState(eventData.tags);
+      this.updateGlobalUserState(eventData.tags);
       this.emit('globaluserstate', eventData);
 
       return;
     }
   }
 
-  _connectInNode(): Promise<void> {
-    const host = 'irc.chat.twitch.tv';
-    const port = this.options.secure ? 6697 : 6667;
-
-    return new Promise<void>((resolve, reject) => {
-      this._connecting = true;
-
-      const handleConnect = () => {
-        this._connecting = false;
-        this._connected = true;
-        this.emit('connect');
-        resolve();
-      };
-
-      if (this.options.secure) {
-        this.socket = tls.connect(port, host, {}, handleConnect);
-      } else {
-        this.socket = new Socket();
-        this.socket.connect(port, host, handleConnect);
-      }
-
-      this.socket.on('error', (error: Error) => {
-        this._connected = false;
-        this._connecting = false;
-        this.emit('disconnect', error);
-
-        reject(error);
-
-        if (this.options.reconnect) {
-          this.reconnect();
-        }
-      });
-      this.socket.on('data', (data: Buffer) => {
-        this.receiveRaw(data.toString());
-      });
-      this.socket.on('close', () => {
-        this._connected = false;
-        this._connecting = false;
-        this._registered = false;
-        this.emit('disconnect');
-      });
-    });
-  }
-
-  _connectInBrowser(): Promise<void> {
-    const url = this.options.secure
-      ? 'wss://irc-ws.chat.twitch.tv:443'
-      : 'ws://irc-ws.chat.twitch.tv:80';
-
-    return new Promise<void>((resolve, reject) => {
-      this._connecting = true;
-      this.socket = new WebSocket(url);
-
-      this.socket.onopen = () => {
-        this._connected = true;
-        this._connecting = false;
-        this.emit('connect');
-        resolve();
-      };
-      this.socket.onmessage = ({ data }) => this.receiveRaw(data);
-      this.socket.onerror = () => {};
-      this.socket.onclose = ({ wasClean, code, reason }) => {
-        this.socket = null;
-        this._connected = false;
-        this._connecting = false;
-        this._registered = false;
-
-        if (wasClean) {
-          this.emit('disconnect');
-        } else {
-          const error = new Error(`[${code}] ${reason}`);
-          this.emit('disconnect', error);
-          reject(error);
-        }
-
-        if (this.options.reconnect) {
-          this.reconnect();
-        }
-      };
-    });
-  }
-
-  _register(): Promise<void> {
-    if (!this._connected) return Promise.reject();
-    if (this._registered) return Promise.resolve();
-
-    const { name, auth } = this.options;
-
-    const nick = name || getRandomUsername();
-    const pass = auth ? `oauth:${auth}` : 'SCHMOOPIIE';
-
-    this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands');
-    this.sendRaw(`PASS ${pass}`);
-    this.sendRaw(`NICK ${nick}`);
-
-    return new Promise<void>((resolve, reject) => {
-      const handleRegister = () => {
-        resolve();
-        this.off('register', handleRegister);
-        this._pingInterval = this._setPingInterval();
-      };
-
-      this.on('register', handleRegister);
-
-      setTimeout(() => {
-        reject();
-        this.off('register', handleRegister);
-      }, 10000);
-    });
-  }
-
-  _setPingInterval() {
-    let disconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const setDisconnectTimeout = () =>
-      setTimeout(() => {
-        clearInterval(this._pingInterval!);
-
-        this.removeAllListeners('pong');
-        this.disconnect();
-        this.reconnect();
-      }, PING_RESPONSE_INTERVAL);
-
-    const handlePong = () => {
-      clearTimeout(disconnectTimeout!);
-    };
-
-    this.on('pong', handlePong);
-
-    return setInterval(() => {
-      disconnectTimeout = setDisconnectTimeout();
-
-      this.sendRaw('PING');
-    }, PING_INTERVAL);
-  }
-
-  _updateGlobalUserState(globalUserState: GlobalUserStateTags) {
+  private updateGlobalUserState(globalUserState: GlobalUserStateTags) {
     this.globalUserState = { ...this.globalUserState, ...globalUserState };
   }
 
-  _updateUserState(channel: string, userState: UserStateTags) {
+  private updateUserState(channel: string, userState: UserStateTags) {
     this.channels = {
       ...this.channels,
       [channel]: {
@@ -532,7 +631,7 @@ export class Client extends EventEmitter {
     };
   }
 
-  _updateRoomState(channel: string, roomState: RoomStateTags) {
+  private updateRoomState(channel: string, roomState: RoomStateTags) {
     this.channels = {
       ...this.channels,
       [channel]: {
@@ -540,18 +639,6 @@ export class Client extends EventEmitter {
         roomState,
       },
     };
-  }
-
-  get connected() {
-    return this._connected;
-  }
-
-  get connecting() {
-    return this._connecting;
-  }
-
-  get registered() {
-    return this._registered;
   }
 }
 
