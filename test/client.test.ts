@@ -1,22 +1,40 @@
+import WebSocket from 'ws';
 import * as tekko from 'tekko';
 
 import { Client } from '../src/client';
 import { parseMessageTags } from '../src/parse';
 
-interface TestClient extends Omit<Client, 'socket'> {
-  socket: {
-    write: jest.Mock<any, any>;
+global.WebSocket = WebSocket;
+
+// @ts-expect-error
+interface TestClient extends Client {
+  handleMessage: (raw: string) => void;
+  connection: {
+    socket: {
+      write: jest.Mock<any, any>;
+      send: jest.Mock<any, any>;
+    };
   };
 }
 
-const createClient = () => {
-  const client = (new Client() as unknown) as TestClient;
+const createClient = (type: 'tcp' | 'ws' = 'tcp') => {
+  const client = (Client.create({
+    connection: { type },
+  }) as unknown) as TestClient;
 
   const socketSend = jest.fn().mockName('socketSend');
 
-  client.socket = {
-    write: socketSend,
-  };
+  if (type === 'tcp') {
+    // @ts-expect-error
+    client.connection.socket = {
+      write: socketSend,
+    };
+  } else {
+    // @ts-expect-error
+    client.connection.socket = {
+      send: socketSend,
+    };
+  }
 
   return client;
 };
@@ -27,10 +45,12 @@ it('handle PING command', () => {
 
   client.on('ping', handleCommand);
 
-  client._handleMessage('PING');
+  client.handleMessage('PING');
 
-  expect(client.socket.write.mock.calls.length).toBe(1);
-  expect(client.socket.write.mock.calls[0][0]).toBe('PONG :tmi.twitch.tv\r\n');
+  expect(client.connection.socket.write.mock.calls.length).toBe(1);
+  expect(client.connection.socket.write.mock.calls[0][0]).toBe(
+    'PONG :tmi.twitch.tv\r\n',
+  );
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0][0]).toEqual({ raw: 'PING' });
 });
@@ -61,8 +81,8 @@ it('handle PRIVMSG command', () => {
     isAction: true,
   };
 
-  client._handleMessage(message1);
-  client._handleMessage(message2);
+  client.handleMessage(message1);
+  client.handleMessage(message2);
 
   expect(handleCommand.mock.calls.length).toBe(2);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -84,7 +104,7 @@ it('handle GLOBALUSERSTATE command', () => {
     tags: parseMessageTags(tekko.parse(message1).tags),
   };
 
-  client._handleMessage(message1);
+  client.handleMessage(message1);
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -106,7 +126,7 @@ it('handle USERSTATE command', () => {
     channel: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
+  client.handleMessage(message1);
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -128,7 +148,7 @@ it('handle ROOMSTATE command', () => {
     channel: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
+  client.handleMessage(message1);
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -142,7 +162,7 @@ it('handle JOIN command', () => {
 
   client.on('join', handleCommand);
 
-  client._handleMessage('JOIN #dmitryscaletta');
+  client.handleMessage('JOIN #dmitryscaletta');
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -155,7 +175,7 @@ it('handle PART command', () => {
 
   client.on('part', handleCommand);
 
-  client._handleMessage('PART #dmitryscaletta');
+  client.handleMessage('PART #dmitryscaletta');
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -177,7 +197,7 @@ it('handle NOTICE command', () => {
     channel: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
+  client.handleMessage(message1);
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -206,8 +226,8 @@ it('handle USERNOTICE command', () => {
     channel: 'sodapoppin',
   };
 
-  client._handleMessage(message1);
-  client._handleMessage(message2);
+  client.handleMessage(message1);
+  client.handleMessage(message2);
 
   expect(handleCommand.mock.calls.length).toBe(2);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -238,8 +258,8 @@ it('handle CLEARCHAT command', () => {
     channel: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
-  client._handleMessage(message2);
+  client.handleMessage(message1);
+  client.handleMessage(message2);
 
   expect(handleCommand.mock.calls.length).toBe(2);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -263,7 +283,7 @@ it('handle CLEARMSG command', () => {
     channel: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
+  client.handleMessage(message1);
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -292,8 +312,8 @@ it('handle HOSTTARGET command', () => {
     channel: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
-  client._handleMessage(message2);
+  client.handleMessage(message1);
+  client.handleMessage(message2);
 
   expect(handleCommand.mock.calls.length).toBe(2);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -318,7 +338,7 @@ it('handle WHISPER command', () => {
     user: 'dmitryscaletta',
   };
 
-  client._handleMessage(message1);
+  client.handleMessage(message1);
 
   expect(handleCommand.mock.calls.length).toBe(1);
   expect(handleCommand.mock.calls[0].length).toBe(1);
@@ -338,22 +358,22 @@ it('sends a message', () => {
   const sendedResult = `PRIVMSG #dmitryscaletta :${message1}\r\n`;
 
   // initialize channel with some data
-  client._handleMessage(message101);
-  client._handleMessage(globalUserState);
-  client._handleMessage(userState);
+  client.handleMessage(message101);
+  client.handleMessage(globalUserState);
+  client.handleMessage(userState);
 
   // should not sent an empty message
   client.say('dmitryscaletta', '');
 
   // message was sent successfully
   client.say('dmitryscaletta', message1);
-  client._handleMessage(userState);
+  client.handleMessage(userState);
 
   // message wasn't sent
   client.say('dmitryscaletta', message1);
-  client._handleMessage(noticeWithMessageError);
+  client.handleMessage(noticeWithMessageError);
 
-  expect(client.socket.write.mock.calls.length).toBe(2);
-  expect(client.socket.write.mock.calls[0][0]).toBe(sendedResult);
-  expect(client.socket.write.mock.calls[1][0]).toBe(sendedResult);
+  expect(client.connection.socket.write.mock.calls.length).toBe(2);
+  expect(client.connection.socket.write.mock.calls[0][0]).toBe(sendedResult);
+  expect(client.connection.socket.write.mock.calls[1][0]).toBe(sendedResult);
 });
