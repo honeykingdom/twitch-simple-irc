@@ -1,36 +1,39 @@
 {
   "name": "@honeykingdom/twitch-simple-irc",
   "version": "0.1.0",
-  "license": "MIT",
   "author": "DmitryScaletta",
   "description": "Simple Twitch Chat Client",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "module": "dist/twitch-simple-irc.esm.js",
+  "files": [
+    "dist",
+    "src"
+  ],
   "repository": {
     "type": "git",
     "url": "git://github.com/honeykingdom/twitch-simple-irc.git"
   },
-  "main": "dist/index.js",
-  "module": "dist/twitch-simple-irc.esm.js",
-  "typings": "dist/index.d.ts",
-  "files": [
-    "dist/**/*"
-  ],
+  "engines": {
+    "node": ">=14"
+  },
   "scripts": {
     "start": "tsdx watch",
     "build": "tsdx build",
     "test": "tsdx test",
-    "lint": "tsdx lint"
+    "lint": "tsdx lint",
+    "prepare": "tsdx build"
   },
   "dependencies": {
     "tekko": "^2.4.0"
   },
   "devDependencies": {
-    "@types/jest": "^26.0.10",
-    "eslint-plugin-prettier": "^3.1.4",
-    "husky": "^4.2.5",
-    "prettier": "^2.0.5",
-    "tsdx": "^0.13.2",
+    "@types/jest": "^26.0.14",
+    "husky": "^4.3.0",
+    "tsdx": "^0.14.0",
     "tslib": "^2.0.1",
-    "typescript": "^4.0.2"
+    "typescript": "^4.0.3"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
