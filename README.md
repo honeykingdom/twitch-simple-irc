@@ -4,9 +4,14 @@ Simple Twitch Chat Client
 
 ## Getting Started
 
-`npm i github:honeykingdom/twitch-simple-irc`
+```
+# .npmrc
+@honeykingdom:registry=https://npm.pkg.github.com
+```
 
-`yarn add github:honeykingdom/twitch-simple-irc`
+`npm install @honeykingdom/twitch-simple-irc`
+
+`yarn add @honeykingdom/twitch-simple-irc`
 
 ## Basic Usage
 
