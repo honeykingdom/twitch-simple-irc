@@ -15,9 +15,3 @@ export const normalizeActionMessage = (message: string): string =>
 
 export const getChannelFromMessage = (message: tekko.Message): string =>
   message.middle[0].slice(1);
-
-export const isNode = !!(
-  typeof process !== 'undefined' &&
-  process.versions &&
-  process.versions.node
-);
